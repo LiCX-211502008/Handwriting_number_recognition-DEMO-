@@ -1,6 +1,7 @@
+from multiprocessing.context import set_spawning_popen
 from pickletools import uint8
 from random import random
-from cv2 import randn
+from turtle import forward
 import numpy as npy
 import cv2 as cv
 import struct
@@ -8,14 +9,16 @@ import time
 import torch
 from torch import device, nn
 from torch.utils.data import DataLoader
+from torchaudio import transforms
 from torchvision import datasets
 from torchvision.transforms import ToTensor, Lambda, Compose
+import torchvision.transforms
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 import draw_number
 import torch.onnx as onnx
 import torchvision.models as models
-
+import Model
 
 Device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using {} device".format(Device))
@@ -40,29 +43,13 @@ def read_labels(add) :
     labels=npy.reshape(labels,[num])
     return labels
 
-class NeuralNetwork(nn.Module):
-    def __init__(self):
-        super(NeuralNetwork,self).__init__()
-        self.flatten = nn.Flatten()
-        self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28*28,512),
-            nn.ReLU(),
-            nn.Linear(512,512),
-            nn.ReLU(),
-            nn.Linear(512,512),
-            nn.ReLU(),
-            nn.Linear(512,10)
-        )
-        
-    def forward(self,x):
-        x = self.flatten(x)
-        logits = self.linear_relu_stack(x)
-        return logits
 
 class MNIST_dataset(Dataset):
     def __init__(self,Images,Labels) -> None:
         super().__init__()
-        self.images,self.labels = torch.from_numpy(Images).to(Device),torch.from_numpy(Labels).to(Device)
+        self.images = npy.reshape(Images,[npy.size(Images,0),1,28,28])
+        #thresh,self.images = cv.threshold(npy.uint8(self.images),120,255,cv.THRESH_BINARY)
+        self.images,self.labels = torch.from_numpy(self.images).to(Device),torch.from_numpy(Labels).to(Device)
         self.images,self.labels = self.images.float(),self.labels.float()
         
     def __len__(self):
@@ -81,7 +68,7 @@ if model_path != '':
     model = torch.load(model_path)
     model.eval()
 else :
-    model = NeuralNetwork().to(Device)
+    model = Model.CNN().to(Device)
 
 train_images = read_img(input('输入训练集图片地址及名称:'))
 train_labels = read_labels(input('输入训练集图片labels地址及名称:'))
@@ -92,8 +79,8 @@ loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(),lr=1e-3,momentum=0.8)
 Batch_size = input("batch size = ")
 Batch_size = int(Batch_size)
-train_dataloader = DataLoader(MNIST_dataset(train_images,train_labels),batch_size = Batch_size)
-test_dataloader = DataLoader(MNIST_dataset(test_images,test_labels),batch_size = Batch_size)
+train_dataloader = DataLoader(MNIST_dataset(train_images,train_labels),batch_size = Batch_size,shuffle = True)
+test_dataloader = DataLoader(MNIST_dataset(test_images,test_labels),batch_size = Batch_size,shuffle = True)
 def train(dataloader,model,loss_fn,optimizer):
     size = len(dataloader.dataset)
     model.train()
@@ -137,20 +124,20 @@ for t in range(epochs):
 
 print("Done!!")
 
-'''for t in range(30):
+for t in range(30):
     num = int(random()*len(test_dataloader))
     Show = test_images[num]
     Show = npy.reshape(Show,(28,28))
     Show = Show.astype(npy.uint8)
     Show = cv.resize(Show,None,fx = 12,fy = 12)
     TEST = test_images[num]
-    TEST = npy.reshape(TEST,[1,28*28])
+    TEST = npy.reshape(TEST,[1,1,28,28])
     TEST = torch.from_numpy(TEST).to(Device)
     TEST = TEST.float()
     cv.imshow("Lable : " + str(test_labels[num]) + "  " + str(model(TEST).argmax(1)) , Show)
     cv.waitKey(0)
     cv.destroyAllWindows()
-    '''
+    
 
 model_path = input("save model path :")
 if model_path != '':
@@ -159,7 +146,7 @@ if model_path != '':
 
 while(1):
     Input_numpy = draw_number.draw_number()
-    Input = torch.from_numpy(Input_numpy).float().to(Device)
+    Input = torch.from_numpy(npy.reshape(Input_numpy,[1,1,28,28])).float().to(Device)
     pred = model(Input)
     print(pred.argmax(1))
     Show = npy.reshape(Input_numpy,(28,28))
